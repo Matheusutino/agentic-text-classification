@@ -25,11 +25,20 @@ from .representation import (
     RepresentationResult,
     SparseRepresentationConfig,
 )
-from .web import ArxivArticle, ArxivSearchResult
+from .web import (
+    ArxivArticle,
+    ArxivSearchResult,
+    DDGSearchResult,
+    DDGSearchResultItem,
+    URLContentResult,
+)
 
 __all__ = [
     "ArxivArticle",
     "ArxivSearchResult",
+    "DDGSearchResult",
+    "DDGSearchResultItem",
+    "URLContentResult",
     "DatasetProfile",
     "DecisionTreeConfig",
     "DenseRepresentationConfig",

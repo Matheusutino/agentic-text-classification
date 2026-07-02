@@ -5,16 +5,17 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RESULTS_ROOT="${PROJECT_ROOT}/results"
+LLM_PROVIDER="openrouter"
+MAX_ROUNDS=5
+MAX_MINUTES=30
+MAX_TOOL_ERRORS_PER_ROUND=3
 
 MODELS=(
-  "qwen/qwen3.5-9b"
-  "openai/gpt-oss-20b"
-  "deepseek/deepseek-v4-flash"
+  #"deepseek/deepseek-v4-flash"
   "openrouter/owl-alpha"
 )
 
 DATASETS=(
-  "CSTR.csv|Classify scientific paper abstracts by research topic."
   "Dmoz-Computers.csv|Classify web pages in the computers domain into subcategories."
   "Dmoz-Health.csv|Classify web pages in the health domain into subcategories."
   "Dmoz-Science.csv|Classify web pages in the science domain into subcategories."
@@ -32,6 +33,24 @@ run_experiment() {
   local task="$2"
   local model="$3"
   local reasoning="$4"
+  local dataset_slug model_slug target_dir
+
+  dataset_slug="$(printf '%s' "${dataset_name%.csv}" | tr '[:upper:]' '[:lower:]' | sed 's/[^[:alnum:]]/_/g; s/__/_/g; s/^_//; s/_$//')"
+  model_slug="$(printf '%s' "${model#*/}" | tr '[:upper:]' '[:lower:]' | sed 's/[^[:alnum:]]/_/g; s/__/_/g; s/^_//; s/_$//')"
+  target_dir="${RESULTS_ROOT}/${dataset_slug}_${model_slug}_${reasoning}"
+
+  if [[ -d "$target_dir" ]]; then
+    echo
+    echo "============================================================"
+    echo "Skipping existing result:"
+    echo "dataset:   $dataset_name"
+    echo "model:     $model"
+    echo "reasoning: $reasoning"
+    echo "path:      $target_dir"
+    echo "============================================================"
+    echo
+    return 0
+  fi
 
   local -a cmd=(
     python
@@ -39,13 +58,13 @@ run_experiment() {
     --task "$task"
     --dataset-name "$dataset_name"
     --output-root "$RESULTS_ROOT"
-    --llm-provider openrouter
+    --llm-provider "$LLM_PROVIDER"
     --llm-model "$model"
+    --thinking-effort "$reasoning"
+    --max-rounds "$MAX_ROUNDS"
+    --max-minutes "$MAX_MINUTES"
+    --max-tool-errors-per-round "$MAX_TOOL_ERRORS_PER_ROUND"
   )
-
-  if [[ "$reasoning" != "none" ]]; then
-    cmd+=(--thinking-effort "$reasoning")
-  fi
 
   echo
   echo "============================================================"
@@ -68,8 +87,8 @@ main() {
     task="${entry#*|}"
 
     for model in "${MODELS[@]}"; do
-      run_experiment "$dataset_name" "$task" "$model" "high"
       run_experiment "$dataset_name" "$task" "$model" "none"
+      run_experiment "$dataset_name" "$task" "$model" "high"
     done
   done
 }

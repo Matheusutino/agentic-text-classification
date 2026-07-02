@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
-from src.types import ArxivArticle, ArxivSearchResult
+from src.types import (
+    ArxivArticle,
+    ArxivSearchResult,
+    DDGSearchResult,
+    DDGSearchResultItem,
+    URLContentResult,
+)
 
 ARXIV_API_URL = "https://export.arxiv.org/api/query"
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom"}
@@ -113,3 +120,96 @@ def search_arxiv(
         total_results=total_results,
         articles=articles,
     )
+
+
+def search_ddg(
+    query: str,
+    max_results: int = 5,
+    backend: str = "text",
+) -> DDGSearchResult:
+    """Search the public internet with DuckDuckGo through LangChain's official DDG integration.
+
+    Args:
+        query: Internet search query string.
+        max_results: Maximum number of web results to return.
+        backend: Search backend. Common values are `text` for general web search and `news` for news search.
+
+    Example:
+        `search_ddg("best tf-idf settings for text classification", max_results=5, backend="text")`
+
+    Returns:
+        Structured DuckDuckGo search results from the public web.
+
+    Use this when a general internet search is genuinely useful, such as:
+        - finding recent discussions, tutorials, or documentation;
+        - checking current terminology, libraries, or common practices;
+        - gathering web evidence to justify a modeling choice.
+    """
+    if max_results < 1:
+        raise ValueError("max_results must be at least 1.")
+
+    try:
+        from langchain_community.tools import DuckDuckGoSearchResults
+    except Exception as exc:
+        raise ImportError(
+            "DuckDuckGo search requires `langchain-community` and `ddgs`."
+        ) from exc
+
+    tool = DuckDuckGoSearchResults(
+        output_format="list",
+        max_results=max_results,
+        backend=backend,
+    )
+    raw_results = tool.invoke(query)
+    results: list[DDGSearchResultItem] = []
+    for item in raw_results:
+        if not isinstance(item, dict):
+            continue
+        results.append(
+            DDGSearchResultItem(
+                title=item.get("title"),
+                link=item.get("link") or item.get("url"),
+                snippet=item.get("snippet") or item.get("body"),
+                source=item.get("source"),
+                date=item.get("date"),
+            )
+        )
+
+    return DDGSearchResult(
+        query=query,
+        backend=backend,
+        max_results=max_results,
+        results=results,
+    )
+
+
+async def _fetch_url_content_async(url: str) -> URLContentResult:
+    from crawl4ai import AsyncWebCrawler
+
+    async with AsyncWebCrawler() as crawler:
+        result = await crawler.arun(url)
+
+    return URLContentResult(
+        url=url,
+        final_url=getattr(result, "url", None),
+        title=getattr(result, "title", None),
+        markdown=getattr(result, "markdown", "") or "",
+    )
+
+
+def fetch_url_content(url: str) -> URLContentResult:
+    """Fetch the main textual content of a web page from a URL.
+
+    Use this after a search tool returns relevant links and you want the page content itself.
+    The result is extracted as markdown so the agent can inspect the article or page text.
+
+    Args:
+        url: Public URL to crawl and extract content from.
+
+    Example:
+        `fetch_url_content("https://example.com/article")`
+
+    Returns:
+        The crawled page content as markdown, plus URL metadata.
+    """
+    return asyncio.run(_fetch_url_content_async(url))

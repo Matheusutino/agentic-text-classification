@@ -52,9 +52,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--thinking-effort",
-        choices=["low", "medium", "high"],
+        choices=["none", "low", "medium", "high"],
         default=None,
-        help="Enable reasoning/thinking for the agent (low, medium, high). Omit to disable.",
+        help="Reasoning level for the agent (none, low, medium, high). Omit to leave it unset.",
     )
     parser.add_argument(
         "--max-tool-errors-per-round",
@@ -103,14 +103,12 @@ def _build_final_output_dir(
     dataset_path: str | None,
     llm_model: str,
     thinking_effort: str | None,
-    timestamp: str,
 ) -> Path:
     run_name = "_".join(
         [
             _dataset_slug(dataset_path),
             _slugify_model_name(_model_suffix(llm_model)),
             _reasoning_slug(thinking_effort),
-            timestamp,
         ]
     )
     return base_root / run_name
@@ -180,6 +178,19 @@ def main() -> int:
     args = parse_args()
     base_output_root = Path(args.output_root).expanduser().resolve()
     base_output_root.mkdir(parents=True, exist_ok=True)
+    if args.dataset_name is not None:
+        requested_output_root = _build_final_output_dir(
+            base_root=base_output_root,
+            dataset_path=args.dataset_name,
+            llm_model=args.llm_model,
+            thinking_effort=args.thinking_effort,
+        )
+        if requested_output_root.exists():
+            print(
+                f"Skipping existing result directory: {requested_output_root}",
+                file=sys.stderr,
+            )
+            return 0
     output_root = _build_output_dir(base_root=base_output_root, llm_model=args.llm_model)
     output_root.mkdir(parents=True, exist_ok=False)
 
@@ -200,7 +211,6 @@ def main() -> int:
         return 1
 
     selected = _selected_round(history)
-    timestamp = output_root.name.removeprefix("pending_").rsplit("_", 2)[-2] + "_" + output_root.name.rsplit("_", 1)[-1]
     final_output_root = _build_final_output_dir(
         base_root=base_output_root,
         dataset_path=(
@@ -210,8 +220,13 @@ def main() -> int:
         ),
         llm_model=args.llm_model,
         thinking_effort=args.thinking_effort,
-        timestamp=timestamp,
     )
+    if final_output_root.exists():
+        print(
+            f"Refusing to overwrite existing result directory: {final_output_root}",
+            file=sys.stderr,
+        )
+        return 1
     output_root.rename(final_output_root)
     output_root = final_output_root
     if selected is not None:

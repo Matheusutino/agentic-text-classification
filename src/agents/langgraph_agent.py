@@ -15,14 +15,14 @@ from src.pipeline.modeling import train_classifier
 from src.pipeline.preprocessing import preprocess_dataset
 from src.pipeline.report import generate_report
 from src.pipeline.representation import build_representation
-from src.pipeline.web import search_arxiv
+from src.pipeline.web import fetch_url_content, search_arxiv, search_ddg
 from src.types import PipelineResult
 
 LANGGRAPH_SYSTEM_PROMPT = """You are an autonomous text classification pipeline agent.
 
 Your objective is to solve the requested text classification task end-to-end by selecting the most appropriate available dataset, identifying the text and label columns, choosing a suitable feature representation, selecting a classifier, running the pipeline, and then calling the `final_result` tool with a valid PipelineResult payload.
 
-Use the available tools to inspect datasets, execute the pipeline, and revise your next action based on tool outputs. You must use exactly one tool call at a time. Do not emit XML-like tool tags, fake tool calls, plain JSON, or prose instead of a real tool call.
+Use the available tools to inspect datasets, execute the pipeline, and revise your next action based on tool outputs. You must use exactly one tool call at a time. Do not emit XML-like tool tags, fake tool calls, plain JSON, or prose instead of a real tool call. Use DuckDuckGo search only when general web search is genuinely useful for selecting or justifying a method.
 
 Before calling `final_result`, make sure preprocessing, representation building, training, evaluation, and report generation have already succeeded in the current run directory.
 
@@ -100,6 +100,8 @@ def _pipeline_tool_mapping() -> dict[str, Any]:
     return {
         "discover_datasets": discover_datasets,
         "dataset_profile": dataset_profile,
+        "search_ddg": search_ddg,
+        "fetch_url_content": fetch_url_content,
         "search_arxiv": search_arxiv,
         "preprocess_dataset": preprocess_dataset,
         "build_representation": build_representation,
@@ -254,6 +256,8 @@ def _build_tool_schemas():
     tools = [
         StructuredTool.from_function(discover_datasets),
         StructuredTool.from_function(dataset_profile),
+        StructuredTool.from_function(search_ddg),
+        StructuredTool.from_function(fetch_url_content),
         StructuredTool.from_function(search_arxiv),
         StructuredTool.from_function(preprocess_dataset),
         StructuredTool.from_function(build_representation),
